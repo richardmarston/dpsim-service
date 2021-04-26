@@ -41,7 +41,7 @@ ENV LD_LIBRARY_PATH="/usr/local/lib64:${LD_LIBRARY_PATH}"
 RUN cd /tmp && \
 	git clone --recursive https://github.com/CIM-IEC/libcimpp.git && \
 	mkdir -p libcimpp/build && cd libcimpp/build && \
-	cmake -DCMAKE_INSTALL_LIBDIR=/usr/local/lib64 -DUSE_CIM_VERSION=IEC61970_16v29a -DBUILD_SHARED_LIBS=ON -DBUILD_ARABICA_EXAMPLES=OFF .. && make -j$(nproc) install && \
+	cmake -DCMAKE_INSTALL_LIBDIR=/usr/local/lib64 -DUSE_CIM_VERSION=CGMES_2.4.15_16FEB2016 -DBUILD_SHARED_LIBS=ON -DBUILD_ARABICA_EXAMPLES=OFF .. && make -j$(nproc) install && \
 	rm -rf /tmp/libcimpp
 
 # Python dependencies
@@ -50,7 +50,7 @@ RUN pip3 install -r requirements-dpsim.txt
 
 # Build DPsim from source
 RUN mkdir /dpsim
-RUN cd /dpsim && git clone --recursive https://github.com/dpsim-simulator/dpsim.git && \
+RUN cd /dpsim && git clone --recursive https://github.com/sogno-platform/dpsim.git && \
     cd /dpsim/dpsim && pip3 install -r requirements.txt && \
                        python3 setup.py install && \
                        mkdir -p build && cd build && \

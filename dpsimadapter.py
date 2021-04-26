@@ -10,6 +10,9 @@ import requests
 import dpsimpy
 import results_db
 
+from io import BytesIO
+import zipfile
+
 class LogFile:
     def __init__(self, analysis_id, filename):
         self.analysis_id = analysis_id
@@ -47,6 +50,7 @@ class SimRunner:
         self.err = LogFile(self.analysis_id, "debug/" + "Analysis_" + str(self.analysis_id) + ".err")
         self.model_id = msg['model_id']
         self.analysis_name = "Analysis_" + str(self.analysis_id)
+        self.csv_data = msg['csv_data']
 
     # This function writes the xml files to disk so that dpsim can read them in.
     # This function should not be required when we have updated dpsim to accept
@@ -79,11 +83,24 @@ class SimRunner:
             db_file.write(f.read())
         db_file.close()
 
+    def send_data_to_db(self, filename, filetype, data):
+        if filetype == "result":
+            db_file = ResultFile(self.analysis_id, filename)
+        elif filetype == "log":
+            db_file = LogFile(self.analysis_id, filename)
+        db_file.write(data)
+        db_file.close()
+
     def execute_dpsimpy(self):
         #initialise dpsimpy
         logger = dpsimpy.Logger(self.analysis_name)
         reader = dpsimpy.CIMReader(self.analysis_name)
         system = reader.loadCIM(50, self.filenames, dpsimpy.Domain.SP, dpsimpy.PhaseType.Single)
+        if system == None:
+            self.err.write("Could not start dpsimpy with files: " + self.filenames)
+            TaskExecutor.status_list[self.analysis_id] = TaskExecutor.Status.error.value
+            return
+        self.read_load_profiles(system)
         sim = dpsimpy.Simulation(self.analysis_name)
         sim.set_system(system)
         sim.set_domain(dpsimpy.Domain.SP)
@@ -92,6 +109,27 @@ class SimRunner:
             logger.log_attribute(node.name()+'.V', 'v', node);
         sim.add_logger(logger)
         sim.run()
+
+    def read_load_profiles(self, system):
+        self.files = []
+        self.csv_directory = None
+        if self.csv_data:
+            try:
+                fp = BytesIO(self.csv_data)
+                with zipfile.ZipFile(fp, "r") as zipfilep:
+                    zipfilep.extractall("CSV_DATA_Analysis_" + str(self.analysis_id))
+                self.csv_directory = "CSV_DATA_Analysis_" + str(self.analysis_id)
+            except Exception as e:
+                self.err.write("Failed to apply csv data: " + e)
+
+        if self.csv_directory:
+            assignList = { }
+            for num in [1, 3, 4, 5, 6, 8, 10, 11, 12, 14]:
+                assignList['LOAD-H-' + str(num)] = 'Load_H_' + str(num)
+            for num in [1, 3, 7, 9, 10, 12, 13, 14]:
+                assignList['LOAD-I-' + str(num)] = 'Load_I_' + str(num)
+            self.csvreader = dpsimpy.CSVReader(self.name, self.csv_directory, assignList, dpsimpy.LogLevel.info)
+            self.csvreader.assignLoadProfile(system, 0, 1, 300, dpsimpy.CSVReaderMode.MANUAL, dpsimpy.CSVReaderFormat.SECONDS)
 
     def run(self):
         try:
@@ -110,7 +148,7 @@ class SimRunner:
             for tempname in self.filenames:
                 os.unlink(tempname)
 
-            log_filename = "logs/" + self.analysis_name + ".log"
+            log_filename = "logs/" + self.analysis_name + "_CIM.log"
             result_filename = "logs/" + self.analysis_name + ".csv"
             self.send_file_to_db(log_filename, "log")
             self.send_file_to_db(result_filename, "result")
@@ -224,9 +262,7 @@ class TaskExecutor:
                 with open(file_) as f:
                     log_string += os.linesep + file_ + ":" + os.linesep + os.linesep + f.read()
             except Exception as e:
-                log_files = glob( "debug/*")
                 log_string = "Failed to read: " + file_ + " because: " + e + "\n"
-                log_string += "Content of debug dir: " + str(log_files) + "\n"
                 self.error("Failed to read: " + file_)
         return log_string
 
@@ -237,7 +273,7 @@ class TaskExecutor:
         files = results_db.get_logs(analysis_id)
         log_string = ""
         for filename in files:
-            log_string += os.linesep + filename + ":" + os.linesep + os.linesep + files[filename]
+            log_string += os.linesep + filename + ":" + os.linesep + os.linesep + str(files[filename])
         return log_string
 
     def get_results(self, analysis_id):
@@ -262,14 +298,21 @@ def add_analysis():  # noqa: E501
      # noqa: E501
     :rtype: AnalysisResponse
     """
+    model_id = connexion.request.form['modelid']
+    name     = connexion.request.form['name']
+    csv_file = connexion.request.files["csv_data"]
+    if csv_file:
+        csv_data = csv_file.stream.read()
+    else:
+        csv_data = None
     taskExecutor = TaskExecutor.get_task_executor()
-    model_id = connexion.request.json['modelid']
     taskExecutor.log("Analysis requested for model id: " + str(model_id))
-    name = connexion.request.json['name']
-    analysis_id = TaskExecutor.get_task_executor().request_analysis({ "model_id": model_id, "name": name })
+    analysis_id = TaskExecutor.get_task_executor().request_analysis({ "model_id": model_id, "name": name, "csv_data": csv_data })
     taskExecutor.log("Analysis requested with id: " + str(analysis_id))
-    connexion.request.json['analysis_id'] = analysis_id
-    return connexion.request.json
+
+    return_object = { "analysis_id": analysis_id, "model_id": model_id, "name": name }
+
+    return return_object
 
 def delete_analysis(id_):  # noqa: E501
     """Delete specific analysis including results

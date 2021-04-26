@@ -41,15 +41,33 @@ paths:
         description: Analysis model to be added
         required: true
         content:
-          application/json:
-            schema:
-              oneOf:
-                - $ref: '#/components/schemas/PowerflowAnalysis'
-                - $ref: '#/components/schemas/OutageAnalysis'
+          multipart/form-data:
             example:
               name: "theAnalysis"
               type: "PowerflowAnalysis"
               modelid: 1
+            schema:
+              type: object
+              required:
+                - name
+                - type
+                - modelid
+              properties:
+                name:
+                  description: Name of analysis case
+                  type: string
+                type:
+                  description: Type of analysis, e.g. PowerflowAnalysis
+                  type: string
+                modelid:
+                  description: Model to consider for analysis
+                  type: integer
+                csv_data:
+                  description: Zip file of load profile data
+                  type: string
+                  format: binary
+
+
       responses:
         '200':
           description: OK

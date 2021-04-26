@@ -1,18 +1,18 @@
 version: "3.8"
 services:
-  cimpy-server:
+  cim-service:
     depends_on:
-      - redis
+      - redis-master
     image: "cimpy-server"
     ports:
       - "8081:8080"
     networks:
       cimpy-server:
         aliases:
-          - "cimpy-server"
+          - "cim-service"
   dpsim-service:
     depends_on:
-      - redis
+      - redis-master
     image: "dpsim-service"
     ports:
       - "8082:8080"
@@ -20,7 +20,7 @@ services:
       cimpy-server:
         aliases:
           - "dpsim-service"
-  redis:
+  redis-master:
     image: "redis:alpine"
     ports:
       - "6379:6379"

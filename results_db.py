@@ -10,6 +10,12 @@ except redis.exceptions.ConnectionError:
     redis_connection = None
     print("WARNING: Unable to connect to redis. No problem on test.")
 
+
+def log(msg):
+    with open("results_db.err", "a") as err:
+        err.write(msg + "\n")
+    err.close()
+
 # TEST ONLY
 def overwrite_connection(connection):
     global redis_connection
